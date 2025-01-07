@@ -1,0 +1,925 @@
+---
+title: "DATA MINING PROJECT_CLEANING DATASET"
+author: "Jairo Onate"
+date: "2024-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# application_data.csv data is about whether a client has payment difficulties
+
+application_data <- read.csv(file = '/Users/jairoonatebarrios/Documents/BDA 620 DATA MINING/PROJECT DATA MINING/Dataset 21-application_data.csv', header = TRUE)
+head(application_data)
+```
+
+```{r}
+# Checking the structure of the application_data
+str(application_data)
+```
+
+
+
+
+```{r}
+library(naniar)
+
+naniar::miss_var_summary(application_data)
+```
+
+```{r, message=FALSE}
+# Converting character columns to factor
+
+library(dplyr)
+
+application_data = application_data %>% mutate_if(is.character, as.factor)
+str(application_data)
+```
+
+
+
+```{r}
+# Variable selection 1
+library(dplyr)
+
+# Selecting all numeric variables and manually excluding those categorical ones recorded as integer or numeric
+application_data_numvars = application_data %>% select(where(is.numeric),
+                                                       -c(NAME_CONTRACT_TYPE,
+                                                          CODE_GENDER,
+                                                          FLAG_OWN_CAR,
+                                                          FLAG_OWN_REALTY,
+                                                          FLAG_MOBIL,
+                                                          FLAG_EMP_PHONE,
+                                                          FLAG_WORK_PHONE,
+                                                          FLAG_CONT_MOBILE,
+                                                          FLAG_PHONE,
+                                                          FLAG_EMAIL,
+                                                          FLAG_DOCUMENT_2, 
+                                                          FLAG_DOCUMENT_3, 
+                                                          FLAG_DOCUMENT_4, 
+                                                          FLAG_DOCUMENT_5, 
+                                                          FLAG_DOCUMENT_6, 
+                                                          FLAG_DOCUMENT_7, 
+                                                          FLAG_DOCUMENT_8, 
+                                                          FLAG_DOCUMENT_9, 
+                                                          FLAG_DOCUMENT_10,
+                                                          FLAG_DOCUMENT_11, 
+                                                          FLAG_DOCUMENT_12, 
+                                                          FLAG_DOCUMENT_13,
+                                                          FLAG_DOCUMENT_14, 
+                                                          FLAG_DOCUMENT_15, 
+                                                          FLAG_DOCUMENT_16,
+                                                          FLAG_DOCUMENT_17, 
+                                                          FLAG_DOCUMENT_18,
+                                                          FLAG_DOCUMENT_19, 
+                                                          FLAG_DOCUMENT_20,
+                                                          FLAG_DOCUMENT_21,
+                                                          REG_REGION_NOT_LIVE_REGION,
+                                                          REG_REGION_NOT_WORK_REGION,
+                                                          LIVE_REGION_NOT_WORK_REGION,
+                                                          REG_CITY_NOT_LIVE_CITY,
+                                                          REG_CITY_NOT_WORK_CITY,
+                                                          LIVE_CITY_NOT_WORK_CITY))
+
+str(application_data_numvars)
+
+# install.packages('ggcorrplot')
+library(ggcorrplot)
+ggcorrplot(cor(application_data_numvars), type = "lower", lab = TRUE, method = "circle", title = "Correlation Matrix Heatmap")
+
+```
+
+
+
+```{r}
+# Cleaning original dataset application_data
+
+# Count of children
+table(application_data$CNT_CHILDREN)
+
+table(ifelse(application_data$CNT_CHILDREN > 5, '6', application_data$CNT_CHILDREN)) # Grouping all families with 6 or more children into one category
+
+application_data$CNT_CHILDREN = (ifelse(application_data$CNT_CHILDREN > 5, '6', application_data$CNT_CHILDREN))
+table(application_data$CNT_CHILDREN)
+
+application_data$CNT_CHILDREN = as.numeric(application_data$CNT_CHILDREN) # Converting CNT_CHILDREN back to numeric
+```
+
+After identifying users with a distinct range on the count of children, all records with more than 6 children have been grouped to reduce the classes from 20 to 7. This $65\%$ reduction will improve the interpretability of the model and computation efficiency. 
+
+```{r}
+# Converting negative values to positive in original dataset application_data
+
+application_data$DAYS_BIRTH = abs(application_data$DAYS_BIRTH)
+application_data$DAYS_EMPLOYED = abs(application_data$DAYS_EMPLOYED)
+application_data$DAYS_REGISTRATION = abs(application_data$DAYS_REGISTRATION)
+application_data$DAYS_ID_PUBLISH = abs(application_data$DAYS_ID_PUBLISH)
+application_data$DAYS_LAST_PHONE_CHANGE = abs(application_data$DAYS_LAST_PHONE_CHANGE)
+
+```
+
+
+
+```{r}
+# Selecting final numeric and integer variables to be stored in application_data_numvars after literature review
+
+application_data_numvars = application_data %>% select(SK_ID_CURR,
+                                                       TARGET,
+                                                       CNT_CHILDREN,
+                                                       AMT_INCOME_TOTAL,
+                                                       AMT_CREDIT,
+                                                       AMT_ANNUITY,
+                                                       AMT_GOODS_PRICE,
+                                                       REGION_POPULATION_RELATIVE,
+                                                       DAYS_BIRTH,
+                                                       DAYS_EMPLOYED,
+                                                       DAYS_LAST_PHONE_CHANGE)
+
+str(application_data_numvars)
+```
+
+
+```{r}
+# Correlation matrix for numeric variables
+
+cor(application_data_numvars)
+
+```
+
+After displaying the correlation matrix we identify some variables with missing values that need to be cleaned and reprocessed from the original dataset stored in `application_data`. 
+
+
+```{r}
+# Calculating the total number of NAs in application_data_numvars
+print(paste('Total number of NAs:',sum(is.na(application_data_numvars))))
+
+# Calculating the total number of missing data in the dataset application_data_numvars and specifying the column based on the previous correlation matrix
+print('-------------------')
+print('Index of NAs for AMT_ANNUITY')
+which(is.na(application_data_numvars$AMT_ANNUITY[])) # Adding the empty bracket at the end of the column gives us the index with NA
+index_na_AMT_ANNUITY = which(is.na(application_data_numvars$AMT_ANNUITY[])) # Saving the index in a variable to reference it when replacing the NAs with the mean
+
+print('-------------------')
+print('Index of NAs for AMT_GOODS_PRICE')
+which(is.na(application_data_numvars$AMT_GOODS_PRICE[]))
+index_na_AMT_GOODS_PRICE = which(is.na(application_data_numvars$AMT_GOODS_PRICE[]))
+
+print('-------------------')
+print('Index of NAs for DAYS_LAST_PHONE_CHANGE')
+which(is.na(application_data_numvars$DAYS_LAST_PHONE_CHANGE[]))
+index_na_DAYS_LAST_PHONE_CHANGE = which(is.na(application_data_numvars$DAYS_LAST_PHONE_CHANGE[]))
+
+```
+
+
+```{r}
+# Summary statistic of each variable in application_data_numvars
+summary(application_data_numvars)
+
+# Calculating mean of the variables with NAs
+(mean_AMT_ANNUITY = summary(application_data_numvars$AMT_ANNUITY)['Mean'])
+(mean_AMT_GOODS_PRICE = summary(application_data_numvars$AMT_GOODS_PRICE)['Mean'])
+(mean_DAYS_LAST_PHONE_CHANGE = summary(application_data_numvars$DAYS_LAST_PHONE_CHANGE)['Mean'])
+
+
+# Replacing the mean in the index of the NAs of the original dataset application_data
+application_data$AMT_ANNUITY[index_na_AMT_ANNUITY] = mean_AMT_ANNUITY
+application_data$AMT_GOODS_PRICE[index_na_AMT_GOODS_PRICE] = mean_AMT_GOODS_PRICE
+application_data$DAYS_LAST_PHONE_CHANGE[index_na_DAYS_LAST_PHONE_CHANGE] = mean_DAYS_LAST_PHONE_CHANGE
+
+# Replacing the NAs with the mean of the column in the dataset application_data_numvars
+application_data_numvars$AMT_ANNUITY[index_na_AMT_ANNUITY] = mean_AMT_ANNUITY
+application_data_numvars$AMT_GOODS_PRICE[index_na_AMT_GOODS_PRICE] = mean_AMT_GOODS_PRICE
+application_data_numvars$DAYS_LAST_PHONE_CHANGE[index_na_DAYS_LAST_PHONE_CHANGE] = mean_DAYS_LAST_PHONE_CHANGE
+
+# Re-checking NAs in the original dataset application_data_numvars
+sum(is.na(application_data_numvars))
+```
+
+
+```{r}
+# Selecting final numeric and integer variables to be stored in application_data_numvars
+
+application_data_numvars = application_data %>% select(SK_ID_CURR,
+                                                       TARGET,
+                                                       CNT_CHILDREN,
+                                                       AMT_INCOME_TOTAL,
+                                                       AMT_CREDIT,
+                                                       AMT_ANNUITY,
+                                                       AMT_GOODS_PRICE,
+                                                       REGION_POPULATION_RELATIVE,
+                                                       DAYS_BIRTH,
+                                                       DAYS_EMPLOYED,
+                                                       DAYS_LAST_PHONE_CHANGE)
+
+str(application_data_numvars)
+```
+
+```{r}
+# Correlation plot final application_data_numvars
+library(ggcorrplot)
+ggcorrplot(cor(application_data_numvars), type = "lower", lab = TRUE, method = "circle", title = "Correlation Matrix Heatmap")
+```
+Even though the variable AMT_GOODS_PRICE and AMT_CREDIT have a almost perfect correlation of 0.99, we have decided to include both of them in the model as we believe it is significance in determining whether a loan is default or not.
+
+
+```{r}
+# Selecting final variables
+
+application_data_final = application_data %>% select(SK_ID_CURR,
+                                                     TARGET,
+                                                     NAME_CONTRACT_TYPE,
+                                                     CODE_GENDER,
+                                                     FLAG_OWN_CAR,
+                                                     FLAG_OWN_REALTY,
+                                                     CNT_CHILDREN,
+                                                     AMT_INCOME_TOTAL,
+                                                     AMT_CREDIT,
+                                                     AMT_ANNUITY,
+                                                     NAME_INCOME_TYPE,
+                                                     NAME_EDUCATION_TYPE,
+                                                     NAME_FAMILY_STATUS,
+                                                     NAME_HOUSING_TYPE,
+                                                     REGION_POPULATION_RELATIVE,
+                                                     DAYS_BIRTH,
+                                                     DAYS_EMPLOYED,
+                                                     FLAG_MOBIL,
+                                                     FLAG_CONT_MOBILE,
+                                                     FLAG_EMAIL,
+                                                     OCCUPATION_TYPE,
+                                                     WEEKDAY_APPR_PROCESS_START,
+                                                     REG_CITY_NOT_LIVE_CITY,
+                                                     DAYS_LAST_PHONE_CHANGE )
+
+str(application_data_final)
+```
+
+
+```{r eval=FALSE}
+# Changing the reference level of WEEKDAY_APPR_PROCESS_START
+relevel(x = application_data_final$WEEKDAY_APPR_PROCESS_START, ref = 'MONDAY')
+```
+
+```{r}
+# Replacing the XNA in CODE_GENDER
+
+str(application_data$CODE_GENDER)
+unique(application_data$CODE_GENDER)
+table(application_data$CODE_GENDER)
+application_data$CODE_GENDER = as.character(application_data$CODE_GENDER)
+
+application_data$CODE_GENDER = case_when(application_data$CODE_GENDER %in% "XNA" ~ "F", .default = as.character(application_data$CODE_GENDER))
+table(application_data$CODE_GENDER)
+
+
+```
+
+```{r}
+# Calculating the total number of NAs in application_data_numvars
+print(paste('Total number of NAs:',sum(is.na(application_data))))
+
+# Calculating the total number of missing data in the dataset application_data
+print('-------------------')
+print('Index of NAs for APARTMENTS_AVG')
+# which(is.na(application_data$APARTMENTS_AVG[])) # Adding the empty bracket at the end of the column gives us the index with NA
+index_na_APARTMENTS_AVG = which(is.na(application_data$APARTMENTS_AVG[])) # Saving the index in a variable to reference it when replacing the NAs with the mean
+
+print('-------------------')
+print('Index of NAs for LANDAREA_AVG')
+# which(is.na(application_data$LANDAREA_AVG[]))
+index_na_LANDAREA_AVG = which(is.na(application_data$LANDAREA_AVG[]))
+
+print('-------------------')
+print('Index of NAs for AMT_REQ_CREDIT_BUREAU_HOUR')
+# which(is.na(application_data$AMT_REQ_CREDIT_BUREAU_HOUR[]))
+index_na_AMT_REQ_CREDIT_HR = which(is.na(application_data$AMT_REQ_CREDIT_BUREAU_HOUR[]))
+
+# Summary statistic of each variable in application_data_numvars
+summary(application_data)
+
+# Calculating mean of the variables with NAs
+(mean_APARTMENTS_AVG = summary(application_data$APARTMENTS_AVG)['Mean'])
+(mean_LANDAREA_AVG = summary(application_data$LANDAREA_AVG)['Mean'])
+(mean_AMT_REQ_CREDIT_HR = summary(application_data$AMT_REQ_CREDIT_BUREAU_HOUR)['Mean'])
+
+
+# Replacing the mean in the index of the NAs of the original dataset application_data
+application_data$APARTMENTS_AVG[index_na_APARTMENTS_AVG] = mean_APARTMENTS_AVG
+application_data$LANDAREA_AVG[index_na_LANDAREA_AVG] = mean_LANDAREA_AVG
+application_data$AMT_REQ_CREDIT_BUREAU_HOUR[index_na_AMT_REQ_CREDIT_HR] = mean_AMT_REQ_CREDIT_HR
+
+
+# Re-checking NAs in the original dataset application_data_numvars
+sum(is.na(application_data_numvars))
+```
+
+
+```{r}
+# Checking NAs and categories of OCCUPATION_TYPE
+unique(application_data$OCCUPATION_TYPE)
+table(application_data$OCCUPATION_TYPE)
+
+application_data$OCCUPATION_TYPE = as.character(application_data$OCCUPATION_TYPE)
+
+# Grouping occupation types into 2 main classes
+application_data$OCCUPATION_TYPE <- case_when(application_data$OCCUPATION_TYPE %in% c(
+"Laborers" ,"Drivers" ,"Sales staff","Cleaning staff","Private service staff", "Security staff" ,"Cooking staff","Waiters/barmen staff","Low-skill Laborers") ~ "General Labor", .default = application_data$OCCUPATION_TYPE )
+
+application_data$OCCUPATION_TYPE <- case_when(application_data$OCCUPATION_TYPE %in% c( 
+"Core staff","Accountants","Managers","Medicine staff","High skill tech staff","Realty agents","Secretaries","IT staff","HR staff" ) ~ "Corporate", .default = application_data$OCCUPATION_TYPE)
+
+# application_data$OCCUPATION_TYPE = as.factor(application_data$OCCUPATION_TYPE)
+table(application_data$OCCUPATION_TYPE)
+# levels(application_data$OCCUPATION_TYPE)
+
+
+index_occupation_na = which(application_data$OCCUPATION_TYPE == "" ) 
+application_data$OCCUPATION_TYPE[index_occupation_na ] = "XNA"
+table(application_data$OCCUPATION_TYPE)
+
+
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "XNA"
+xna_records = application_data[application_data$OCCUPATION_TYPE == "XNA", ]
+xna_records = xna_records[sample(nrow(xna_records)), ]
+
+# Determine split size for 2 classes "General Labor" and "Corporate"
+split_size = floor(nrow(xna_records) / 2)
+
+# Get the row indices for each split
+index_class_1 <- rownames(xna_records)[1:split_size]
+index_class_2 <- rownames(xna_records)[(split_size + 1):nrow(xna_records)]
+
+
+# Replace values in the original data frame based on the class indices
+application_data[index_class_1, 'OCCUPATION_TYPE'][] = "General Labor"
+application_data[index_class_2, 'OCCUPATION_TYPE'][] = "Corporate"
+
+
+# Checking the frequency of the new classes
+table(application_data$OCCUPATION_TYPE)
+application_data$OCCUPATION_TYPE = as.factor(application_data$OCCUPATION_TYPE)
+```
+
+
+```{r}
+application_data = application_data %>% mutate_if(is.character, as.factor)
+```
+
+
+```{r eval=FALSE, warning=FALSE}
+# install.packages('writexl')
+library(writexl)
+
+writexl::write_xlsx(x = list( 'application_data_numvars' = application_data_numvars, 'application_data_final' = application_data_final), path = '/Users/jairoonatebarrios/Documents/BDA 620 DATA MINING/PROJECT DATA MINING/application_data_cleaned.xlsx', col_names = TRUE, format_headers = TRUE)
+
+```
+
+
+
+```{r eval=FALSE, warning=FALSE}
+# Writing new excel with final variables for application dataset
+
+application_data_final_32VARS = application_data %>% select(SK_ID_CURR, TARGET, NAME_CONTRACT_TYPE, CODE_GENDER, FLAG_OWN_CAR, FLAG_OWN_REALTY, CNT_CHILDREN, AMT_INCOME_TOTAL, AMT_CREDIT, AMT_ANNUITY, AMT_GOODS_PRICE, NAME_INCOME_TYPE, NAME_EDUCATION_TYPE, NAME_FAMILY_STATUS, NAME_HOUSING_TYPE, REGION_POPULATION_RELATIVE, DAYS_BIRTH, DAYS_EMPLOYED, DAYS_REGISTRATION, DAYS_ID_PUBLISH, FLAG_MOBIL, FLAG_EMP_PHONE, FLAG_CONT_MOBILE, FLAG_EMAIL, OCCUPATION_TYPE, WEEKDAY_APPR_PROCESS_START, REG_CITY_NOT_LIVE_CITY, ORGANIZATION_TYPE, APARTMENTS_AVG, LANDAREA_AVG, DEF_60_CNT_SOCIAL_CIRCLE, DAYS_LAST_PHONE_CHANGE, FLAG_DOCUMENT_2, AMT_REQ_CREDIT_BUREAU_HOUR)
+
+str(application_data_final_32VARS)
+
+# install.packages('writexl')
+library(writexl)
+
+writexl::write_xlsx(x = list( 'application_data_numvars' = application_data_numvars, 'application_data_final' = application_data_final, 'application_data_final_32VARS' = application_data_final_32VARS), path = '/Users/jairoonatebarrios/Documents/BDA 620 DATA MINING/PROJECT DATA MINING/application_data_cleaned_ALL_FILES.xlsx', col_names = TRUE, format_headers = TRUE)
+
+```
+
+
+
+```{r}
+# previous_application.csv data whether the previous application had been Approved, Cancelled, Refused or Unused offer
+
+previous_application = read.csv(file = '/Users/jairoonatebarrios/Documents/BDA 620 DATA MINING/PROJECT DATA MINING/previous_application.csv', header = TRUE)
+head(previous_application)
+```
+
+```{r}
+# Checking the dataset previous_application before cleaning
+str(previous_application)
+```
+
+
+```{r}
+# Converting chr variables to factors in previous_application
+
+library(dplyr)
+
+previous_application = previous_application %>% mutate_if(is.character, as.factor)
+
+# Changing WEEKDAY_APPR_PROCESS_START reference level to Monday in previous_application
+previous_application$WEEKDAY_APPR_PROCESS_START = relevel(x = previous_application$WEEKDAY_APPR_PROCESS_START, ref = 'MONDAY')
+levels(previous_application$WEEKDAY_APPR_PROCESS_START)
+
+# Changing negative values to positive with absolute value function in dataset previous_application
+previous_application$DAYS_DECISION = abs(previous_application$DAYS_DECISION)
+previous_application$SELLERPLACE_AREA = abs(previous_application$SELLERPLACE_AREA)
+previous_application$DAYS_FIRST_DUE = abs(previous_application$DAYS_FIRST_DUE)
+previous_application$DAYS_LAST_DUE = abs(previous_application$DAYS_LAST_DUE)
+previous_application$DAYS_LAST_DUE_1ST_VERSION = abs(previous_application$DAYS_LAST_DUE_1ST_VERSION)
+previous_application$DAYS_TERMINATION = abs(previous_application$DAYS_TERMINATION)
+
+str(previous_application)
+```
+
+```{r}
+# Checking total number of NAs previous_application
+sum((is.na(previous_application)))
+
+# Saving the index of NAs values in previous_application for future reference when replacing with mean
+index_na_pa_AMT_DOWN_PAYMENT = which(is.na(previous_application$AMT_DOWN_PAYMENT[]))
+index_na_pa_RATE_DOWN_PAYMENT = which(is.na(previous_application$RATE_DOWN_PAYMENT[]))
+index_na_pa_RATE_INTEREST_PRIMARY = which(is.na(previous_application$RATE_INTEREST_PRIMARY[]))
+index_na_pa_RATE_INTEREST_PRIVILEGED = which(is.na(previous_application$RATE_INTEREST_PRIVILEGED[]))
+index_na_pa_CNT_PAYMENT = which(is.na(previous_application$CNT_PAYMENT[]))
+index_na_pa_DAYS_FIRST_DRAWING = which(is.na(previous_application$DAYS_FIRST_DRAWING[]))
+index_na_pa_DAYS_FIRST_DUE = which(is.na(previous_application$DAYS_FIRST_DUE[]))
+index_na_pa_DAYS_LAST_DUE_1ST_VERSION = which(is.na(previous_application$DAYS_LAST_DUE_1ST_VERSION[]))
+index_na_pa_DAYS_LAST_DUE = which(is.na(previous_application$DAYS_LAST_DUE[]))
+index_na_pa_DAYS_TERMINATION = which(is.na(previous_application$DAYS_TERMINATION[]))
+
+# Referencing the index of NAs and replacing with mean previous_application
+previous_application$AMT_DOWN_PAYMENT[index_na_pa_AMT_DOWN_PAYMENT] = mean(previous_application$AMT_DOWN_PAYMENT, na.rm = TRUE)
+previous_application$RATE_DOWN_PAYMENT[index_na_pa_RATE_DOWN_PAYMENT] = mean(previous_application$RATE_DOWN_PAYMENT, na.rm = TRUE)
+previous_application$RATE_INTEREST_PRIMARY[index_na_pa_RATE_INTEREST_PRIMARY] = mean(previous_application$RATE_INTEREST_PRIMARY, na.rm = TRUE)
+previous_application$RATE_INTEREST_PRIVILEGED[index_na_pa_RATE_INTEREST_PRIVILEGED] = mean(previous_application$RATE_INTEREST_PRIVILEGED, na.rm = TRUE)
+previous_application$CNT_PAYMENT[index_na_pa_CNT_PAYMENT] = mean(previous_application$CNT_PAYMENT, na.rm = TRUE)
+previous_application$DAYS_FIRST_DRAWING[index_na_pa_DAYS_FIRST_DRAWING] = mean(previous_application$DAYS_FIRST_DRAWING, na.rm = TRUE)
+previous_application$DAYS_FIRST_DUE[index_na_pa_DAYS_FIRST_DUE] = mean(previous_application$DAYS_FIRST_DUE, na.rm = TRUE)
+previous_application$DAYS_LAST_DUE_1ST_VERSION[index_na_pa_DAYS_LAST_DUE_1ST_VERSION] = mean(previous_application$DAYS_LAST_DUE_1ST_VERSION, na.rm = TRUE)
+previous_application$DAYS_LAST_DUE[index_na_pa_DAYS_LAST_DUE] = mean(previous_application$DAYS_LAST_DUE, na.rm = TRUE)
+previous_application$DAYS_TERMINATION[index_na_pa_DAYS_TERMINATION] = mean(previous_application$DAYS_TERMINATION, na.rm = TRUE)
+
+# Rechecking total number of NAs previous_application
+sum((is.na(previous_application)))
+```
+
+
+```{r}
+str(previous_application$NFLAG_INSURED_ON_APPROVAL)
+
+table(previous_application$NFLAG_INSURED_ON_APPROVAL, useNA = "ifany") # Knowing the distribution of the records
+
+sum_na_NFLAG_INSURED_ON_APPROVAL = sum(is.na(previous_application$NFLAG_INSURED_ON_APPROVAL)) # Total number of NAs in NFLAG_INSURED_ON_APPROVAL
+
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "NA"
+nflag_insured_records = previous_application[is.na(previous_application$NFLAG_INSURED_ON_APPROVAL), ]
+nflag_insured_records = nflag_insured_records[sample(nrow(nflag_insured_records)), ]
+
+# Determine split size for 2 classes
+split_size_NFLAG_INSURED = floor(nrow(nflag_insured_records) / 2) # 336532 out of 673065
+
+# Get the row indices for each split
+index_class_1_NFLAG_INS <- rownames(nflag_insured_records)[1:split_size_NFLAG_INSURED]
+index_class_2_NFLAG_INS <- rownames(nflag_insured_records)[(split_size_NFLAG_INSURED + 1):(2 * split_size_NFLAG_INSURED + 1)]
+
+
+# Replace values in the original data frame based on the class indices
+previous_application[index_class_1_NFLAG_INS, 'NFLAG_INSURED_ON_APPROVAL'][] = 0
+previous_application[index_class_2_NFLAG_INS, 'NFLAG_INSURED_ON_APPROVAL'][] = 1
+
+
+# Checking the frequency of the new classes
+table(previous_application$NFLAG_INSURED_ON_APPROVAL)
+unique(previous_application$NFLAG_INSURED_ON_APPROVAL)
+which(is.na(previous_application$NFLAG_INSURED_ON_APPROVAL[]))
+
+```
+
+
+```{r}
+# Converting FLAG variables to factors
+previous_application$NFLAG_LAST_APPL_IN_DAY = as.factor(previous_application$NFLAG_LAST_APPL_IN_DAY)
+previous_application$NFLAG_INSURED_ON_APPROVAL = as.factor(previous_application$NFLAG_INSURED_ON_APPROVAL)
+
+
+str(previous_application)
+```
+
+```{r}
+# Checking the structure of all factors in previous_application
+previous_application %>% select(where(is.factor)) %>% str()
+
+```
+
+```{r}
+# Reducing dimensions of previous_application$NAME_CASH_LOAN_PURPOSE
+previous_application$NAME_CASH_LOAN_PURPOSE = as.character(previous_application$NAME_CASH_LOAN_PURPOSE)
+
+# Grouping into consumer/personal loans 
+previous_application$NAME_CASH_LOAN_PURPOSE = case_when(previous_application$NAME_CASH_LOAN_PURPOSE %in% 
+            c("Buying a garage", "Education", "Furniture", "Hobby", "Medicine", "Other", 
+              "Purchase of electronic equipment", "Repairs", "Wedding / gift / holiday", 
+              "Car repairs" , "Everyday expenses", "Journey", "Money for a third person", 
+              "Payments on other loans", "Urgent needs") ~ "Consumer/Personal_loans", 
+          .default = as.character(previous_application$NAME_CASH_LOAN_PURPOSE))                                                          
+
+# Grouping into Real state/Car loans
+
+previous_application$NAME_CASH_LOAN_PURPOSE = case_when(previous_application$NAME_CASH_LOAN_PURPOSE %in%
+            c("Building a house or an annex", "Buying a home", "Buying a used car", 
+              "Buying a new car", "Buying a holiday home / land") ~ "Real_State/Car_loans" , 
+          .default = as.character(previous_application$NAME_CASH_LOAN_PURPOSE))
+
+
+# Grouping into Business Development loans
+
+previous_application$NAME_CASH_LOAN_PURPOSE = case_when(previous_application$NAME_CASH_LOAN_PURPOSE %in% c("Business development" , "Gasification / water supply") ~ "Business_Dev_loans", .default = as.character(previous_application$NAME_CASH_LOAN_PURPOSE))
+
+
+# Grouping into others 
+
+previous_application$NAME_CASH_LOAN_PURPOSE = case_when(previous_application$NAME_CASH_LOAN_PURPOSE %in% c("Other", "XNA", "XAP", "Refusal to name the goal") ~ "Other", .default = as.character(previous_application$NAME_CASH_LOAN_PURPOSE))
+
+
+# Checking the levels previous_application$NAME_CASH_LOAN_PURPOSE
+previous_application$NAME_CASH_LOAN_PURPOSE = as.factor(previous_application$NAME_CASH_LOAN_PURPOSE)
+levels(previous_application$NAME_CASH_LOAN_PURPOSE)
+```
+
+
+
+```{r}
+# Who accompanied client when applying for the previous application --- previous_application$NAME_TYPE_SUITE
+levels(previous_application$NAME_TYPE_SUITE)
+
+previous_application$NAME_TYPE_SUITE = as.character(previous_application$NAME_TYPE_SUITE)
+
+# Changing to a unique group "Other"
+previous_application$NAME_TYPE_SUITE = ifelse(previous_application$NAME_TYPE_SUITE == "" |
+                                                previous_application$NAME_TYPE_SUITE == "Other_A" |
+                                                previous_application$NAME_TYPE_SUITE == "Other_B" , 
+                                              "Other", previous_application$NAME_TYPE_SUITE) 
+
+# Grouping to a category named Family
+previous_application$NAME_TYPE_SUITE = ifelse(previous_application$NAME_TYPE_SUITE == "Children" | previous_application$NAME_TYPE_SUITE == "Family" | previous_application$NAME_TYPE_SUITE == "Spouse, partner" , "Family", previous_application$NAME_TYPE_SUITE)
+
+# Converting previous_application$NAME_TYPE_SUITE again as factor
+previous_application$NAME_TYPE_SUITE = as.factor(previous_application$NAME_TYPE_SUITE)
+
+levels(previous_application$NAME_TYPE_SUITE)
+
+str(previous_application$NAME_TYPE_SUITE)
+```
+
+```{r}
+# Checking frequency of the classes stored in previous_application$NAME_YIELD_GROUP
+str(previous_application$NAME_YIELD_GROUP)
+levels(previous_application$NAME_YIELD_GROUP)
+table(previous_application$NAME_YIELD_GROUP)
+
+previous_application$NAME_YIELD_GROUP = as.character(previous_application$NAME_YIELD_GROUP)
+
+# Renaming low classes to small to match the description in the dictionary
+previous_application$NAME_YIELD_GROUP = ifelse(previous_application$NAME_YIELD_GROUP == "low_action" | 
+         previous_application$NAME_YIELD_GROUP =="low_normal", "Small",
+       previous_application$NAME_YIELD_GROUP)
+
+
+previous_application$NAME_YIELD_GROUP = case_when(previous_application$NAME_YIELD_GROUP == "middle" ~ "Medium", .default = as.character(previous_application$NAME_YIELD_GROUP))
+
+
+previous_application$NAME_YIELD_GROUP = case_when(previous_application$NAME_YIELD_GROUP == "high" ~ "High", .default = as.character(previous_application$NAME_YIELD_GROUP))
+
+# Checking the frequency of the new classes
+table(previous_application$NAME_YIELD_GROUP)
+```
+
+
+```{r}
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "XNA"
+xna_records = previous_application[previous_application$NAME_YIELD_GROUP == "XNA", ]
+xna_records = xna_records[sample(nrow(xna_records)), ]
+
+# Determine split size for 3 classes
+split_size = floor(nrow(xna_records) / 3)
+
+# Get the row indices for each split
+index_class_1 <- rownames(xna_records)[1:split_size]
+index_class_2 <- rownames(xna_records)[(split_size + 1):(2 * split_size)]
+index_class_3 <- rownames(xna_records)[(2 * split_size + 1):nrow(xna_records)]
+
+
+# Replace values in the original data frame based on the class indices
+previous_application[index_class_1, 'NAME_YIELD_GROUP'][] = "High"
+previous_application[index_class_2, 'NAME_YIELD_GROUP'][] = "Medium"
+previous_application[index_class_3, 'NAME_YIELD_GROUP'][] = "Small"
+
+# Checking the frequency of the new classes
+table(previous_application$NAME_YIELD_GROUP)
+previous_application$NAME_YIELD_GROUP = as.factor(previous_application$NAME_YIELD_GROUP)
+```
+
+
+```{r}
+# Checking frequency of the classes stored in previous_application$NAME_PAYMENT_TYPE
+str(previous_application$NAME_PAYMENT_TYPE)
+levels(previous_application$NAME_PAYMENT_TYPE)
+previous_application$NAME_PAYMENT_TYPE = as.character(previous_application$NAME_PAYMENT_TYPE)
+
+table(previous_application$NAME_PAYMENT_TYPE)
+
+
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "XNA"
+name_payment_type_records = previous_application[previous_application$NAME_PAYMENT_TYPE == "XNA", ]
+name_payment_type_records = name_payment_type_records[sample(nrow(name_payment_type_records)), ]
+
+# Determine split size for 3 classes
+split_size_NAME_PAYMENT_TYPE = floor(nrow(name_payment_type_records) / 3) # 209128 out of 627384
+
+# Get the row indices for each split
+index_class_1_NAME_PAYMENT_TYPE <- rownames(name_payment_type_records)[1:split_size_NAME_PAYMENT_TYPE]
+index_class_2_NAME_PAYMENT_TYPE <- rownames(name_payment_type_records)[(split_size_NAME_PAYMENT_TYPE + 1):(2 * split_size_NAME_PAYMENT_TYPE)]
+index_class_3_NAME_PAYMENT_TYPE <- rownames(name_payment_type_records)[(2 * split_size_NAME_PAYMENT_TYPE + 1):nrow(name_payment_type_records)]
+
+
+# Replace values in the original data frame based on the class indices
+previous_application[index_class_1_NAME_PAYMENT_TYPE, 'NAME_PAYMENT_TYPE'][] = 'Cash through the bank'
+previous_application[index_class_2_NAME_PAYMENT_TYPE, 'NAME_PAYMENT_TYPE'][] = 'Cashless from the account of the employer'
+previous_application[index_class_3_NAME_PAYMENT_TYPE, 'NAME_PAYMENT_TYPE'][] = 'Non-cash from your account' 
+
+
+# Checking the frequency of the new classes
+table(previous_application$NAME_PAYMENT_TYPE)
+unique(previous_application$NAME_PAYMENT_TYPE)
+which(is.na(previous_application$NAME_PAYMENT_TYPE[]))
+sum(previous_application[previous_application$NAME_PAYMENT_TYPE == "XNA", ])
+
+```
+
+
+```{r}
+str(previous_application$CODE_REJECT_REASON)
+levels(previous_application$CODE_REJECT_REASON) # There is no information in the dictionary specifying the describing each level
+```
+
+```{r}
+# Group categories of the variable NAME_GOODS_CATEGORY to reduce dimensions
+str(previous_application)
+
+levels(previous_application$NAME_GOODS_CATEGORY)
+
+
+previous_application$NAME_GOODS_CATEGORY = as.character(previous_application$NAME_GOODS_CATEGORY)
+```
+
+
+```{r, message=FALSE}
+library(dplyr)
+
+# Grouping "Other"
+previous_application$NAME_GOODS_CATEGORY = case_when(previous_application$NAME_GOODS_CATEGORY == "XNA" ~ "Other", .default = as.character(previous_application$NAME_GOODS_CATEGORY))
+
+# Grouping "Consumer Electronics"
+previous_application$NAME_GOODS_CATEGORY = case_when(previous_application$NAME_GOODS_CATEGORY %in% c("Computers", "Mobile", "Photo / Cinema Equipment", "Audio/Video") ~ "Consumer Electronics", .default =  as.character(previous_application$NAME_GOODS_CATEGORY))
+
+# Grouping as "Lifestyle and Other needs"
+previous_application$NAME_GOODS_CATEGORY = case_when(previous_application$NAME_GOODS_CATEGORY %in% c("Education", "Gardening", "Insurance", "Medicine", "Tourism", "Animals", "Clothing and Accessories", "Fitness", "Jewelry", "Medical Supplies", "Sport and Leisure", "Weapon")  ~ "Lifestyle and Others needs", .default = as.character(previous_application$NAME_GOODS_CATEGORY))
+
+# Grouping "Construction, Automotive, Home and Office"
+previous_application$NAME_GOODS_CATEGORY = case_when(previous_application$NAME_GOODS_CATEGORY %in% c("Auto Accessories", "Construction Materials", "Homewares", "Vehicles", "Furniture", "House Construction", "Office Appliances")  ~ "Construction, Automotive, Home and Office", .default = as.character(previous_application$NAME_GOODS_CATEGORY))
+
+previous_application$NAME_GOODS_CATEGORY = case_when(previous_application$NAME_GOODS_CATEGORY %in% c("Direct Sales", "Additional Service") ~ "Other", .default = previous_application$NAME_GOODS_CATEGORY)
+
+# previous_application$NAME_GOODS_CATEGORY = case_when(previous_application$NAME_GOODS_CATEGORY %in% c("Auto Accessories", "Construction Materials", "Education", "Gardening", "Insurance", "Medicine", "Tourism", "Animals", "Clothing and Accessories", "Fitness", "Homewares", "Jewelry", "Vehicles", "Furniture", "House Construction", "Medical Supplies", "Office Appliances", "Sport and Leisure", "Weapon")  ~ "Lifestyle and Others needs", .default = as.character(previous_application$NAME_GOODS_CATEGORY))
+
+unique(previous_application$NAME_GOODS_CATEGORY)
+previous_application$NAME_GOODS_CATEGORY = as.factor(previous_application$NAME_GOODS_CATEGORY)
+levels(previous_application$NAME_GOODS_CATEGORY)
+```
+
+
+```{r}
+levels(previous_application$NAME_SELLER_INDUSTRY)
+str(previous_application$NAME_SELLER_INDUSTRY)
+
+previous_application$NAME_SELLER_INDUSTRY = as.character(previous_application$NAME_SELLER_INDUSTRY)
+
+# Reassigning "XNA" values to the 10 defined SELLER INDUSTRIES
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "XNA"
+xna_records_SELLER_IND = previous_application[previous_application$NAME_SELLER_INDUSTRY == "XNA", ]
+xna_records_SELLER_IND = xna_records_SELLER_IND[sample(nrow(xna_records_SELLER_IND)), ]
+
+# Determine split size for 10 classes
+split_size <- floor(nrow(xna_records_SELLER_IND) / 10)
+
+# Get the row indices for each of the 10 classes
+index_class_1 <- rownames(xna_records_SELLER_IND)[1:split_size]
+index_class_2 <- rownames(xna_records_SELLER_IND)[(split_size + 1):(2 * split_size)]
+index_class_3 <- rownames(xna_records_SELLER_IND)[(2 * split_size + 1):(3 * split_size)]
+index_class_4 <- rownames(xna_records_SELLER_IND)[(3 * split_size + 1):(4 * split_size)]
+index_class_5 <- rownames(xna_records_SELLER_IND)[(4 * split_size + 1):(5 * split_size)]
+index_class_6 <- rownames(xna_records_SELLER_IND)[(5 * split_size + 1):(6 * split_size)]
+index_class_7 <- rownames(xna_records_SELLER_IND)[(6 * split_size + 1):(7 * split_size)]
+index_class_8 <- rownames(xna_records_SELLER_IND)[(7 * split_size + 1):(8 * split_size)]
+index_class_9 <- rownames(xna_records_SELLER_IND)[(8 * split_size + 1):(9 * split_size)]
+index_class_10 <- rownames(xna_records_SELLER_IND)[(9 * split_size + 1):nrow(xna_records_SELLER_IND)]
+
+# Replace values in the original data frame based on the class indices
+previous_application[index_class_1, 'NAME_SELLER_INDUSTRY'][] = "Auto technology"
+previous_application[index_class_2, 'NAME_SELLER_INDUSTRY'][] = "Clothing"
+previous_application[index_class_3, 'NAME_SELLER_INDUSTRY'][] = "Connectivity"
+previous_application[index_class_4, 'NAME_SELLER_INDUSTRY'][] = "Construction"
+previous_application[index_class_5, 'NAME_SELLER_INDUSTRY'][] = "Consumer electronics"
+previous_application[index_class_6, 'NAME_SELLER_INDUSTRY'][] = "Furniture"
+previous_application[index_class_7, 'NAME_SELLER_INDUSTRY'][] = "Industry"
+previous_application[index_class_8, 'NAME_SELLER_INDUSTRY'][] = "Jewelry"
+previous_application[index_class_9, 'NAME_SELLER_INDUSTRY'][] = "MLM partners"
+previous_application[index_class_10, 'NAME_SELLER_INDUSTRY'][] = "Tourism"
+  
+# Checking the frequency of the new classes
+table(previous_application$NAME_SELLER_INDUSTRY)
+previous_application$NAME_SELLER_INDUSTRY = as.factor(previous_application$NAME_SELLER_INDUSTRY)
+```
+
+
+```{r}
+str(previous_application)
+
+levels(previous_application$NAME_PORTFOLIO)
+levels(previous_application$NAME_PRODUCT_TYPE)
+levels(previous_application$CHANNEL_TYPE)
+```
+
+```{r}
+levels(previous_application$NAME_PORTFOLIO)
+str(previous_application$NAME_PORTFOLIO)
+
+previous_application$NAME_PORTFOLIO = as.character(previous_application$NAME_PORTFOLIO)
+
+# Reassigning "XNA" values to the 4 defined NAME PORTFOLIO
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "XNA"
+xna_records_NAME_PORTF = previous_application[previous_application$NAME_PORTFOLIO == "XNA", ]
+xna_records_NAME_PORTF = xna_records_NAME_PORTF[sample(nrow(xna_records_NAME_PORTF)), ]
+
+# Determine split size for 4 classes
+split_size = floor(nrow(xna_records_NAME_PORTF) / 4)
+
+# Get the row indices for each split
+index_class_1 <- rownames(xna_records_NAME_PORTF)[1:split_size]
+index_class_2 <- rownames(xna_records_NAME_PORTF)[(split_size + 1):(2 * split_size)]
+index_class_3 <- rownames(xna_records_NAME_PORTF)[(2 * split_size + 1):(3 * split_size)]
+index_class_4 <- rownames(xna_records_NAME_PORTF)[(3 * split_size + 1):nrow(xna_records_NAME_PORTF)]
+
+
+# Replace values in the original data frame based on the class indices
+previous_application[index_class_1, 'NAME_PORTFOLIO'][] = "Cards"
+previous_application[index_class_2, 'NAME_PORTFOLIO'][] = "Cars"
+previous_application[index_class_3, 'NAME_PORTFOLIO'][] = "Cash"
+previous_application[index_class_4, 'NAME_PORTFOLIO'][] = "POS"
+
+# Checking the frequency of the new classes
+unique(previous_application$NAME_PORTFOLIO)
+table(previous_application$NAME_PORTFOLIO)
+previous_application$NAME_PORTFOLIO = as.factor(previous_application$NAME_PORTFOLIO)
+```
+
+
+```{r}
+str(previous_application$NAME_CONTRACT_TYPE)
+levels(previous_application$NAME_CONTRACT_TYPE)
+previous_application$NAME_CONTRACT_TYPE = as.character(previous_application$NAME_CONTRACT_TYPE)
+
+# Reassigning "XNA" values to the 3 defined NAME PORTFOLIO
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "XNA"
+xna_records_NAME_CONTRACT_TYPE = previous_application[previous_application$NAME_CONTRACT_TYPE == "XNA", ]
+xna_records_NAME_CONTRACT_TYPE = xna_records_NAME_CONTRACT_TYPE[sample(nrow(xna_records_NAME_CONTRACT_TYPE)), ]
+
+# Determine split size for 3 classes
+split_size = floor(nrow(xna_records_NAME_CONTRACT_TYPE) / 3)
+
+# Get the row indices for each split
+index_class_1 <- rownames(xna_records_NAME_CONTRACT_TYPE)[1:split_size]
+index_class_2 <- rownames(xna_records_NAME_CONTRACT_TYPE)[(split_size + 1):(2 * split_size)]
+index_class_3 <- rownames(xna_records_NAME_CONTRACT_TYPE)[(2 * split_size + 1):nrow(xna_records_NAME_CONTRACT_TYPE)]
+
+
+# Replace values in the original data frame based on the class indices
+previous_application[index_class_1, 'NAME_CONTRACT_TYPE'][] = "Cash loans"
+previous_application[index_class_2, 'NAME_CONTRACT_TYPE'][] = "Consumer loans"
+previous_application[index_class_3, 'NAME_CONTRACT_TYPE'][] = "Revolving loans"
+
+# Checking the frequency of the new classes
+unique(previous_application$NAME_CONTRACT_TYPE)
+table(previous_application$NAME_CONTRACT_TYPE)
+previous_application$NAME_CONTRACT_TYPE = as.factor(previous_application$NAME_CONTRACT_TYPE)
+```
+
+
+```{r eval=FALSE, include=FALSE}
+str(previous_application$NFLAG_INSURED_ON_APPROVAL)
+levels(previous_application$NFLAG_INSURED_ON_APPROVAL)
+table(previous_application$NFLAG_INSURED_ON_APPROVAL)
+previous_application$NFLAG_INSURED_ON_APPROVAL = as.character(previous_application$NFLAG_INSURED_ON_APPROVAL)
+
+
+index_nflag_insured_na = which(is.na(previous_application$NFLAG_INSURED_ON_APPROVAL)) 
+previous_application$NFLAG_INSURED_ON_APPROVAL[index_nflag_insured_na ] = "XNA"
+table(previous_application$NFLAG_INSURED_ON_APPROVAL)
+
+
+
+# Reassigning "XNA" values to the 2 NFLAG_INSURED_ON_APPROVAL
+# Set a seed for reproducibility
+set.seed(123)
+
+# Filter and shuffle records labeled as "XNA"
+xna_records_NFLAG_INSURED_ON_APPROVAL = previous_application[previous_application$NFLAG_INSURED_ON_APPROVAL == "XNA", ]
+xna_records_NFLAG_INSURED_ON_APPROVAL = xna_records_NFLAG_INSURED_ON_APPROVAL[sample(nrow(xna_records_NFLAG_INSURED_ON_APPROVAL)), ]
+
+# Determine split size for 2 classes
+split_size = floor(nrow(xna_records_NFLAG_INSURED_ON_APPROVAL) / 2)
+
+# Get the row indices for each split
+index_class_1 <- rownames(xna_records_NFLAG_INSURED_ON_APPROVAL)[1:split_size]
+index_class_2 <- rownames(xna_records_NFLAG_INSURED_ON_APPROVAL)[(split_size + 1):nrow(xna_records_NFLAG_INSURED_ON_APPROVAL)]
+
+
+# Replace values in the original data frame based on the class indices
+previous_application[index_class_1, 'NFLAG_INSURED_ON_APPROVAL'][] = "0"
+previous_application[index_class_2, 'NFLAG_INSURED_ON_APPROVAL'][] = "1"
+
+
+# Checking the frequency of the new classes
+unique(previous_application$NFLAG_INSURED_ON_APPROVAL)
+table(previous_application$NFLAG_INSURED_ON_APPROVAL)
+previous_application$NFLAG_INSURED_ON_APPROVAL = as.factor(previous_application$NFLAG_INSURED_ON_APPROVAL)
+```
+
+
+```{r}
+# Converting all character variables to factors
+previous_application = previous_application %>% mutate_if(is.character, as.factor)
+```
+
+
+
+```{r, message=FALSE}
+library(dplyr)
+
+# Selecting only numeric variables
+previous_application_numvars = previous_application %>% select(where(is.numeric))
+
+
+# Selecting all variables
+previous_application_final = previous_application
+
+# Selecting final variables
+previous_application_final_17VARS = previous_application %>% select(SK_ID_PREV, 
+                                                                    SK_ID_CURR, 
+                                                                    NAME_CONTRACT_TYPE, 
+                                                                    AMT_ANNUITY, 
+                                                                    AMT_APPLICATION, 
+                                                                    AMT_CREDIT, 
+                                                                    AMT_GOODS_PRICE, 
+                                                                    NAME_CASH_LOAN_PURPOSE,
+                                                                    NAME_CONTRACT_STATUS,
+                                                                    DAYS_DECISION, 
+                                                                    NAME_PAYMENT_TYPE, 
+                                                                    NAME_GOODS_CATEGORY, 
+                                                                    CNT_PAYMENT, 
+                                                                    NAME_YIELD_GROUP, 
+                                                                    DAYS_FIRST_DRAWING,
+                                                                    NFLAG_INSURED_ON_APPROVAL)
+```
+
+
+```{r eval=FALSE}
+
+write.csv(x = previous_application_numvars, file = '/Users/jairoonatebarrios/Documents/BDA 620 DATA MINING/PROJECT DATA MINING/previous_application_numvars_cleaned.csv')
+
+write.csv(x = previous_application_final, file = '/Users/jairoonatebarrios/Documents/BDA 620 DATA MINING/PROJECT DATA MINING/previous_application_final_cleaned.csv')
+
+write.csv(x = previous_application_final_17VARS, file = '/Users/jairoonatebarrios/Documents/BDA 620 DATA MINING/PROJECT DATA MINING/previous_application_final_cleaned_17VARS.csv')
+```
+
+

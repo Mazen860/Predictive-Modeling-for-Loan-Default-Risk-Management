@@ -1,0 +1,807 @@
+---
+title: "Untitled"
+author: "Jun Ming Li"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Libraries used
+```{r}
+
+library(car)
+library(leaps)
+library(olsrr)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(readxl)
+
+```
+
+
+
+```{r}
+
+# Load and preview Data
+prev_app_Final         <- read.csv("previous_application_final_cleaned_17VARS.csv")
+# prev_app_Num           <- read.csv("previous_application_numvars_cleaned.csv")
+appdata_final          <- read_excel("application_data_cleaned_ALL_FILES.xlsx", sheet = 3)
+
+# appdata_numvars        <- read_excel("application_data_cleaned.xlsx", sheet = 1)
+ excel_sheets("application_data_cleaned_ALL_FILES.xlsx")
+
+
+
+# str(prev_app_Final)
+# str(appdata_final)
+# 
+
+
+
+```
+
+
+
+
+
+
+# Join both data and match to have the same ID: appdata_final$SK_ID_CURR  = prev_app_Final$SK_ID_CURR 
+
+```{r}
+
+
+
+# inner join, so that we only have columns where the IDs match 
+# https://www.youtube.com/watch?v=Yg-pNqzDuN4 
+
+
+# Rename all previous columns with a suffix
+prev_app_Final <- prev_app_Final %>% rename_with(~ paste(., "prev", sep = "_"))
+prev_app_Final <- rename(prev_app_Final, X =X_prev, SK_ID_CURR = SK_ID_CURR_prev)
+
+
+Merged_data <- inner_join(appdata_final,prev_app_Final, by='SK_ID_CURR', suffix = c("_df1", "_df2"))
+
+# df1 = appdata_final
+# df2 = prev_app_Final
+
+
+## Check to make sure the suffix naming convention works
+
+# # items from appdata_final
+# Merged_data %>% select(contains('df1'))
+# 
+# # items from prev_app_Final
+# Merged_data %>% select(contains('df2'))
+
+
+str(Merged_data)
+head(Merged_data)
+
+```
+
+
+
+
+
+# Mazen's ideas
+
+```{r}
+
+
+# ratios of loan amount given out to price of item being bought with the loan
+Merged_data$LoanGoodR_df1 <- Merged_data$AMT_CREDIT/Merged_data$AMT_GOODS_PRICE
+Merged_data$LoanGoodR_df2 <- Merged_data$AMT_CREDIT_prev/Merged_data$AMT_GOODS_PRICE_prev
+# This is officially called the Loan to Value ratio
+
+
+
+# check for any NA values (where loan given out is 0)
+sum(is.na(Merged_data$LoanGoodR_df1))
+
+sum((is.na(Merged_data$LoanGoodR_df2)))
+
+which((is.na(Merged_data$LoanGoodR_df2)))
+Merged_data$LoanGoodR_df2[11]
+
+
+# find the frequency of ratios
+LoanstoGooddf1_frequency <- data.frame(sort(table(Merged_data$LoanGoodR_df1), decreasing = TRUE))
+colnames(LoanstoGooddf1_frequency) = c("Ratio","Count") #changing the column names for easier understanding
+LoanstoGooddf1_frequency
+
+
+# plot the distribution
+plot(table(Merged_data$LoanGoodR_df1), ylab="Frequency Count", xlab = "Ratio of Loan to Good")
+
+
+```
+
+
+
+
+```{r}
+
+plot(table(Merged_data$REGION_POPULATION_RELATIVE))
+
+ggplot(Merged_data,aes(x=REGION_POPULATION_RELATIVE)) +geom_histogram()
+
+# The bins seem to be from 0 to .1 , .1 to .2 , and .2 to .3, and .3+
+# The data is mostly symmetrical, with only a few outlier points. 
+
+
+# If we find outliers (from the residual plot) in our regression model, we can change the outliers into the mean/median/mode of the value in the columns.and we-add them back in
+
+
+
+
+```
+
+
+
+
+# Dimension Reduction of non-numeric data
+
+
+
+```{r}
+
+# Find variables that are factors
+# Merged_data %>% select(!is.numeric)
+
+# Education
+unique(Merged_data$NAME_EDUCATION_TYPE) #Change to Middle, HS, College+. The "Incomplete higher" will be classified as college 
+
+Merged_data$NAME_EDUCATION_TYPE <- case_when(Merged_data$NAME_EDUCATION_TYPE %in% c("Lower secondary") ~ "Middle School", .default = Merged_data$NAME_EDUCATION_TYPE)
+
+Merged_data$NAME_EDUCATION_TYPE <- case_when(Merged_data$NAME_EDUCATION_TYPE %in% c("Secondary / secondary special") ~ "High School", .default = Merged_data$NAME_EDUCATION_TYPE)
+
+Merged_data$NAME_EDUCATION_TYPE <- case_when(Merged_data$NAME_EDUCATION_TYPE %in% c("Higher education", "Incomplete higher","Academic degree" ) ~ "College+", .default = Merged_data$NAME_EDUCATION_TYPE)
+
+
+
+# Employment status
+unique(Merged_data$NAME_INCOME_TYPE)    #Unemployed, Retired, Student, Employed
+Merged_data$NAME_INCOME_TYPE <- case_when(Merged_data$NAME_INCOME_TYPE %in% c("Working","State servant","Commercial associate", "Maternity leave")~ "Employed", .default = Merged_data$NAME_INCOME_TYPE)
+
+Merged_data$NAME_INCOME_TYPE <- case_when(Merged_data$NAME_INCOME_TYPE %in% c("Pensioner") ~ "Retired", .default = Merged_data$NAME_INCOME_TYPE)
+
+       
+# Marital Status       
+unique(Merged_data$NAME_FAMILY_STATUS) #Married, Widowed, or Single
+Merged_data$NAME_FAMILY_STATUS <- case_when(Merged_data$NAME_FAMILY_STATUS %in% c("Separated", "Single") ~ "Single", .default = Merged_data$NAME_FAMILY_STATUS)
+Merged_data$NAME_FAMILY_STATUS <- case_when(Merged_data$NAME_FAMILY_STATUS %in% c("Married", "Civil marriage") ~ "Married", .default = Merged_data$NAME_FAMILY_STATUS)
+
+
+# Housing Type
+unique(Merged_data$NAME_HOUSING_TYPE)
+
+# municipal housing is government provided housing, group with rented apartment.
+# coop apartment, they own a part of the building (usually a room if they can afford the shares for one whole room), group with housing/apartment
+# office apartmenmt is a building made by a corporation and workers can rent it out to live close by
+
+Merged_data$NAME_HOUSING_TYPE <- case_when(Merged_data$NAME_HOUSING_TYPE %in% c("House / apartment","Co-op apartment"  ) ~ "Owned", .default = Merged_data$NAME_HOUSING_TYPE)
+
+Merged_data$NAME_HOUSING_TYPE <- case_when(Merged_data$NAME_HOUSING_TYPE %in% c("Rented apartment","Municipal apartment", "Office apartment") ~ "Renting", .default = Merged_data$NAME_HOUSING_TYPE)
+
+Merged_data$NAME_HOUSING_TYPE <- case_when(Merged_data$NAME_HOUSING_TYPE %in% c("With parents" ) ~ "Doesn't Own", .default = Merged_data$NAME_HOUSING_TYPE)
+
+
+
+# Finished by Jairo already
+unique(Merged_data$OCCUPATION_TYPE)
+
+
+# Organization type (We have decided to remove this variable from our study)
+unique(Merged_data$ORGANIZATION_TYPE)
+# https://jccc.libguides.com/c.php?g=511520&p=3494606 To define industry type
+
+Merged_data$ORGANIZATION_TYPE <- NULL
+
+
+
+# Contract type, already in 2 categories
+unique(Merged_data$NAME_CONTRACT_TYPE)
+
+# Jairo Finished
+unique(Merged_data$NAME_CONTRACT_TYPE_prev)
+
+
+
+unique(Merged_data$NAME_CONTRACT_STATUS_prev)
+# Canceled, either the client or bank stopped the loan application process
+# Refused, by the bank
+# Unused, the loan was granted, but did not use the credit line
+
+unique(Merged_data$NAME_CASH_LOAN_PURPOSE_prev)
+unique(Merged_data$NAME_CONTRACT_STATUS_prev)
+unique(Merged_data$NAME_GOODS_CATEGORY_prev)
+
+
+
+```
+
+# Dimension Reduction of numeric data
+
+```{r}
+
+# Jairo fixed the rest in his data clean up code
+
+```
+
+
+
+## Make the categorical variables into factors
+
+```{r}
+str(Merged_data)
+
+
+# Non-numerical ones
+
+categorical_names <- names(dplyr::select(Merged_data,
+  TARGET,
+  CNT_CHILDREN, #do not remove this. This makes the AUC below .5
+  CODE_GENDER,
+  FLAG_OWN_CAR,
+  FLAG_OWN_REALTY,
+  NAME_INCOME_TYPE,
+  NAME_EDUCATION_TYPE,
+  NAME_FAMILY_STATUS,
+  NAME_HOUSING_TYPE,
+  OCCUPATION_TYPE,
+  WEEKDAY_APPR_PROCESS_START,
+  NAME_CONTRACT_STATUS_prev,
+  NAME_CONTRACT_TYPE,
+  NAME_CASH_LOAN_PURPOSE_prev,
+  # NAME_PAYMENT_TYPE_prev, # has NAs, must remove it
+  NAME_GOODS_CATEGORY_prev,
+  NAME_YIELD_GROUP_prev,
+  NFLAG_INSURED_ON_APPROVAL_prev,
+  NAME_CONTRACT_TYPE_prev,
+  REG_CITY_NOT_LIVE_CITY
+))
+
+Merged_data[,categorical_names] <- lapply(Merged_data[,categorical_names], FUN= as.factor)
+str(Merged_data)
+
+
+
+unique(Merged_data$FLAG_EMP_PHONE)
+unique(Merged_data$FLAG_CONT_MOBILE)
+unique(Merged_data$FLAG_EMAIL)
+
+
+# Numerical ones
+
+categorical_names2 <- names(Merged_data %>% dplyr::select(
+  FLAG_EMP_PHONE,
+  FLAG_CONT_MOBILE,
+  FLAG_EMAIL,
+  FLAG_DOCUMENT_2
+))
+
+Merged_data[,categorical_names2] <- lapply(Merged_data[,categorical_names2], FUN= as.factor)
+str(Merged_data)
+
+# Old Code
+# categorical_names2 <- names(Merged_data %>% select(contains('FLAG')))
+# Merged_data[,categorical_names2] <- lapply(Merged_data[,categorical_names2], FUN= as.factor)
+# str(Merged_data)
+
+
+
+#Final Check
+str(Merged_data)
+
+
+
+
+
+
+```
+
+
+
+## Remove Unnecessary Variables
+
+```{r}
+str(Merged_data)
+
+# remove identifier keys
+Merged_data$X <- NULL
+Merged_data$SK_ID_CURR <- NULL
+Merged_data$SK_ID_PREV_prev <- NULL
+
+
+# This data only has 1 entry value for all rows
+unique(Merged_data$FLAG_MOBIL)
+Merged_data$FLAG_MOBIL <- NULL
+
+Merged_data$NAME_PAYMENT_TYPE_prev <- NULL
+Merged_data$DEF_60_CNT_SOCIAL_CIRCLE <- NULL
+
+```
+
+
+
+## check for values that are 0 and change them to infinitly small ones. Also check for Inf values for our ratios.
+
+```{r include=FALSE}
+str(Merged_data)
+
+
+# LoanValue ratio
+Merged_data$LoanGoodR_df1[Merged_data$LoanGoodR_df1 == 0]
+Merged_data$LoanGoodR_df1[which(is.na(Merged_data$LoanGoodR_df1))]
+Merged_data$LoanGoodR_df1[which(is.infinite(Merged_data$LoanGoodR_df1))] <- .999
+
+# LoanValue ratio previous application
+Merged_data$LoanGoodR_df2[Merged_data$LoanGoodR_df2 == 0]
+Merged_data$LoanGoodR_df2[which(is.na(Merged_data$LoanGoodR_df2))] <- .001
+Merged_data$LoanGoodR_df2[which(is.infinite(Merged_data$LoanGoodR_df2))] <- .999
+
+
+# AMT_INCOME_TOTAL
+Merged_data$AMT_INCOME_TOTAL[Merged_data$AMT_INCOME_TOTAL == 0]
+Merged_data$AMT_INCOME_TOTAL[which(is.na(Merged_data$AMT_INCOME_TOTAL))] <- .001
+
+
+# AMT_ANNUITY 
+Merged_data$AMT_ANNUITY[Merged_data$AMT_ANNUITY == 0]
+Merged_data$AMT_ANNUITY[which(is.na(Merged_data$AMT_ANNUITY))] <- .001
+
+# AMT_GOODS_PRICE
+Merged_data$AMT_GOODS_PRICE[Merged_data$AMT_GOODS_PRICE == 0]
+Merged_data$AMT_GOODS_PRICE[which(is.na(Merged_data$AMT_GOODS_PRICE))] <- .001
+
+# REGION_POPULATION_RELATIVE
+Merged_data$REGION_POPULATION_RELATIVE[Merged_data$REGION_POPULATION_RELATIVE == 0]
+Merged_data$REGION_POPULATION_RELATIVE[which(is.na(Merged_data$REGION_POPULATION_RELATIVE))] <- .001
+
+
+# DAYS_EMPLOYED
+Merged_data$DAYS_EMPLOYED[Merged_data$DAYS_EMPLOYED == 0] <- .001
+Merged_data$DAYS_EMPLOYED[which(is.na(Merged_data$DAYS_EMPLOYED))]
+
+# DAYS_REGISTRATION
+Merged_data$DAYS_REGISTRATION[Merged_data$DAYS_REGISTRATION == 0] <- .001
+Merged_data$DAYS_REGISTRATION[which(is.na(Merged_data$DAYS_REGISTRATION))]
+
+# DAYS_ID_PUBLISH 
+Merged_data$DAYS_ID_PUBLISH[Merged_data$DAYS_ID_PUBLISH == 0] <- .001
+Merged_data$DAYS_ID_PUBLISH[which(is.na(Merged_data$DAYS_ID_PUBLISH))]
+
+# APARTMENTS_AVG
+Merged_data$APARTMENTS_AVG[Merged_data$APARTMENTS_AVG == 0] <- .001
+Merged_data$APARTMENTS_AVG[which(is.na(Merged_data$APARTMENTS_AVG))]
+
+
+# LANDAREA_AVG 
+Merged_data$APARTMENTS_AVG[Merged_data$APARTMENTS_AVG == 0] <- .001
+Merged_data$APARTMENTS_AVG[which(is.na(Merged_data$APARTMENTS_AVG))]
+
+# DAYS_LAST_PHONE_CHANGE  
+Merged_data$DAYS_LAST_PHONE_CHANGE[Merged_data$DAYS_LAST_PHONE_CHANGE == 0] <- .001
+Merged_data$DAYS_LAST_PHONE_CHANGE[which(is.na(Merged_data$DAYS_LAST_PHONE_CHANGE))]
+
+
+# AMT_REQ_CREDIT_BUREAU_HOUR
+Merged_data$AMT_REQ_CREDIT_BUREAU_HOUR[Merged_data$AMT_REQ_CREDIT_BUREAU_HOUR == 0] <- .001
+Merged_data$AMT_REQ_CREDIT_BUREAU_HOUR[which(is.na(Merged_data$AMT_REQ_CREDIT_BUREAU_HOUR))]
+
+# AMT_ANNUITY_prev
+Merged_data$AMT_ANNUITY_prev[Merged_data$AMT_ANNUITY_prev == 0] <- .001
+Merged_data$AMT_ANNUITY_prev[which(is.na(Merged_data$AMT_ANNUITY_prev))] <- .001
+
+# AMT_APPLICATION_prev
+Merged_data$AMT_APPLICATION_prev[Merged_data$AMT_APPLICATION_prev == 0] <- .001
+Merged_data$AMT_APPLICATION_prev[which(is.na(Merged_data$AMT_APPLICATION_prev))] 
+
+# AMT_CREDIT_prev
+Merged_data$AMT_CREDIT_prev[Merged_data$AMT_CREDIT_prev == 0] <- .001
+Merged_data$AMT_CREDIT_prev[which(is.na(Merged_data$AMT_CREDIT_prev))] <- .001
+
+# DAYS_DECISION_prev 
+Merged_data$DAYS_DECISION_prev[Merged_data$DAYS_DECISION_prev == 0] <- .001
+Merged_data$DAYS_DECISION_prev[which(is.na(Merged_data$DAYS_DECISION_prev))] <- .001
+
+# CNT_PAYMENT_prev
+Merged_data$CNT_PAYMENT_prev[Merged_data$CNT_PAYMENT_prev == 0] <- .001
+Merged_data$CNT_PAYMENT_prev[which(is.na(Merged_data$CNT_PAYMENT_prev))] <- .001
+
+
+# DAYS_FIRST_DRAWING_prev
+Merged_data$DAYS_FIRST_DRAWING_prev[Merged_data$DAYS_FIRST_DRAWING_prev == 0] <- .001
+Merged_data$DAYS_FIRST_DRAWING_prev[which(is.na(Merged_data$DAYS_FIRST_DRAWING_prev))] <- .001
+
+
+# Replace NAs with the mean of Amt goods Price from previous application
+
+Merged_data$AMT_GOODS_PRICE_prev[which(is.na(Merged_data$AMT_GOODS_PRICE_prev))] <- mean(Merged_data$AMT_GOODS_PRICE_prev, na.rm = TRUE)
+
+# sapply(Merged_data, function(x) which(is.na(x)))
+
+```
+
+
+
+
+
+## Further manual review and removal of variables 
+```{r}
+
+# str(Merged_data)
+# 
+# Merged_data %>% select(is.numeric)
+
+# children count, has 7 dummy variables...either convert to numeric or remove...I want to remove it for now
+# weekday, has 7 dummy variables, the day was not that important when we discussed it)
+# REG_CITY_NOT_LIVE_CITY, their vicinity or how close to a city may not seem important for now
+# NAME_GOODS_CATEGORY_prev, because NAME_CASH_LOAN_PURPOSE_prev sort of already covers "Why" or "what" the loan is used for
+
+# # 2nd run removal
+
+# 
+# 
+Merged_data$CNT_CHILDREN <- NULL
+Merged_data$WEEKDAY_APPR_PROCESS_START <- NULL
+Merged_data$REG_CITY_NOT_LIVE_CITY <- NULL
+Merged_data$NAME_GOODS_CATEGORY_prev <- NULL
+Merged_data$NAME_INCOME_TYPE <- NULL
+
+
+Merged_data$FLAG_EMP_PHONE <- NULL
+Merged_data$FLAG_CONT_MOBILE <- NULL
+Merged_data$DAYS_LAST_PHONE_CHANGE <- NULL
+
+Merged_data$NAME_FAMILY_STATUS <- NULL
+Merged_data$FLAG_EMAIL <- NULL
+Merged_data$APARTMENTS_AVG <- NULL
+Merged_data$LANDAREA_AVG <- NULL
+
+# Merged_data$REGION_POPULATION_RELATIVE
+Merged_data$AMT_ANNUITY <- NULL
+Merged_data$AMT_ANNUITY_prev <- NULL
+Merged_data$AMT_REQ_CREDIT_BUREAU_HOUR <- NULL
+Merged_data$DAYS_FIRST_DRAWING_prev <- NULL
+Merged_data$NAME_YIELD_GROUP_prev <- NULL
+Merged_data$NFLAG_INSURED_ON_APPROVAL_prev <- NULL
+Merged_data$AMT_APPLICATION_prev <- NULL
+Merged_data$DAYS_ID_PUBLISH <- NULL
+Merged_data$DAYS_REGISTRATION <- NULL
+
+# 
+# # remvoval after forward stepwise
+# 
+Merged_data$LoanGoodR_df2 <- NULL
+Merged_data$NAME_CASH_LOAN_PURPOSE_prev <-  NULL
+Merged_data$CODE_GENDER <- NULL
+Merged_data$AMT_GOODS_PRICE <- NULL
+Merged_data$AMT_GOODS_PRICE_prev <- NULL
+Merged_data$AMT_CREDIT <- NULL
+Merged_data$AMT_CREDIT_prev <- NULL
+Merged_data$CNT_PAYMENT_prev <- NULL
+
+str(Merged_data)
+
+# NAME_CONTRACT_STATUS showed that only one of the levels seem to be significant, but due to how important of a metric this generally is , we have decided to keep this in our model. 
+
+
+# LoanGoodR_df2 was considered not significant, which shows that the current application's metrics are weighted a bit more. 
+
+# NAME_CASH_LOAN_PURPOSE_prev, not statistically significant
+# Gender- bank cannot discriminate on gender.
+
+ 
+# The above variables were further removed from our initial data reduction after more literature review and consideration of the typical metric by which banks judge a person's credit worthiness. Moreover, variables suchs as gender, were removed because banks cannot feasible enforce restrictions against those variables under penalty of law. 
+
+```
+
+
+```{r}
+
+summary(Merged_data)
+
+
+```
+
+## Summary Statistics generation
+
+```{r}
+
+str(Merged_data)
+
+
+multiple.func <- function(x) {
+      c(min = min(x), mean = mean(x), max = max(x))
+}
+
+multiple.func2 <- function(x) {
+      c(counts= table(x))
+}
+
+
+summary_num_stat <- as.data.frame(sapply(Merged_data %>% dplyr::select(where(is.numeric)), multiple.func))
+
+summary_num_stat$Statistic <- c('Min','Mean','Max')
+summary_num_stat <- summary_num_stat %>% relocate(Statistic, .after = last_col())
+
+summary_factor_stats <- c(
+
+Target = table(Merged_data$TARGET),
+NAME_CONTRACT_TYPE = table(Merged_data$NAME_CONTRACT_TYPE),
+FLAG_OWN_REALTY = table(Merged_data$FLAG_OWN_REALTY),
+FLAG_OWN_CAR = table(Merged_data$FLAG_OWN_CAR),
+NAME_EDUCATION_TYPE = table(Merged_data$NAME_EDUCATION_TYPE),
+NAME_HOUSING_TYPE = table(Merged_data$NAME_HOUSING_TYPE),
+OCCUPATION_TYPE = table(Merged_data$OCCUPATION_TYPE),
+FLAG_DOCUMENT_2 = table(Merged_data$FLAG_DOCUMENT_2),
+NAME_CONTRACT_TYPE_prev = table(Merged_data$NAME_CONTRACT_TYPE_prev),
+NAME_CONTRACT_STATUS_prev = table(Merged_data$NAME_CONTRACT_STATUS_prev)
+
+)
+
+summary_factor_stats <- as.data.frame(summary_factor_stats)
+
+library(writexl)
+
+
+write_xlsx(x = list('Summary num stats' = summary_num_stat,
+                    'summary factor stats' = summary_factor_stats
+                    ), 'LoanDefaulterSummaryStatistics.xlsx', col_names = TRUE, format_headers = TRUE)
+
+
+mean(Merged_data$AMT_INCOME_TOTAL)
+mean(Merged_data$DAYS_BIRTH)
+mean(Merged_data$DAYS_EMPLOYED)
+mean(Merged_data$NAME_HOUSING_TYPE)
+mean(Merged_data$FLAG_OWN_CAR)
+mean(Merged_data$FLAG_OWN_REALTY)
+
+```
+
+
+
+
+
+
+
+
+## Partition data
+
+```{r}
+
+set.seed(123)
+
+# Partition data into training (70%) and testing (30%) data sets
+
+# create a sample of indexes
+Merged_data.rows <- nrow(Merged_data)
+Merged_data.index <- sample(Merged_data.rows, .7*Merged_data.rows)
+
+# create datasets using above randomly chosen indexes
+Merged_data.train <- Merged_data[Merged_data.index,]
+Merged_data.test  <- Merged_data[-Merged_data.index,]
+
+# confirm the total number of rows matches the above
+nrow(Merged_data.test) + nrow(Merged_data.train)
+
+
+```
+
+
+
+## Balance the data
+
+```{r}
+
+# str(Merged_data.train)
+
+table(Merged_data.train$TARGET)
+table(Merged_data.train$TARGET)/nrow(Merged_data.train)
+
+#      0      1 
+#   903996  85594 
+#  91.3%      8.7%
+
+
+# 0 = no payment difficulties (this is the reference leve1)
+# 1 = client with payment difficulties: he/she had late payment more than X days on at least one of the first Y installments of the loan in our sample
+
+
+
+library(ROSE)
+
+# balanced data set with over-sampling
+# We are taking the minority class, and oversampling it. 
+Merged_data.train.balanced.over <- ovun.sample(TARGET ~ ., data=Merged_data.train, p=0.5, method= "under")
+Merged_data.train.balanced.over <- Merged_data.train.balanced.over$data
+
+
+# Save the balanced dataset
+
+Merged_data.train <- Merged_data.train.balanced.over
+(table(Merged_data.train.balanced.over$TARGET)) / nrow(Merged_data.train)
+```
+
+
+
+
+
+## Scale the Train Dataset
+
+```{r}
+### Using Z-score
+
+str(Merged_data.train)
+
+# Standardize input variables
+
+# create function to divide the days into year
+divide365 <- function(x, na.rm = FALSE) round((x/365),2)
+
+# creating my own scaling function because the R one produces errors when trying to predict or create a LM 
+myscale <- function(x) (x - mean(x)) / sd(x)
+
+
+Merged_data.train <- Merged_data.train %>% mutate(across(colnames(Merged_data.train %>% dplyr::select(contains('DAYS'))),divide365))
+
+Merged_data.train <- Merged_data.train %>% mutate(across(colnames(Merged_data.train %>% dplyr::select(is.numeric)), myscale))
+
+
+# str(Merged_data)
+
+
+```
+
+
+
+
+## Scale the Test Dataset
+
+```{r}
+### Using Z-score
+
+str(Merged_data.test)
+
+# Standardize input variables
+
+# create function to divide the days into year
+divide365 <- function(x, na.rm = FALSE) round((x/365),2)
+
+# creating my own scaling function because the R one produces errors when trying to predict or create a LM 
+myscale <- function(x) (x - mean(x)) / sd(x)
+
+
+Merged_data.test <- Merged_data.test %>% mutate(across(colnames(Merged_data.test %>% dplyr::select(contains('DAYS'))),divide365))
+
+Merged_data.test <- Merged_data.test %>% mutate(across(colnames(Merged_data.test %>% dplyr::select(is.numeric)), myscale))
+
+# str(Merged_data)
+
+
+```
+
+
+
+
+
+## Logistic Regression, Full Model
+
+```{r}
+
+
+
+logit.reg.all <- glm(TARGET ~., data =  Merged_data.train, family = 'binomial')
+summary(logit.reg.all)
+
+str(Merged_data.train)
+
+names(Merged_data.train)
+
+```
+
+
+
+```{r}
+
+
+summary_model <- data.frame(summary(logit.reg.all)$coef)
+
+summary_model$Index <- row.names(summary(logit.reg.all)$coef)
+
+library(writexl)
+
+
+write_xlsx(x = list( 
+                     'summary_model' = summary_model
+                     ), 'Logistic_Coef.xlsx', col_names = TRUE, format_headers = TRUE)
+
+
+
+
+```
+
+
+
+
+
+
+# Testing the Prediction on Testing Data Set
+[Review this to make sure logistic also works](https://www.sthda.com/english/articles/36-classification-methods-essentials/150-stepwise-logistic-regression-essentials-in-r/)
+
+```{r}
+
+
+# General probabilities from logit model
+predicted.test.prob <- predict(logit.reg.all, newdata=Merged_data.test, type = "response")
+
+
+# We need to consider what the reference level of our target variable.
+Merged_data.test$TARGET <- as.factor(Merged_data.test$TARGET)
+Merged_data.train$TARGET <- as.factor(Merged_data.train$TARGET)
+# The reference level is 0, meaning they didn't default. 
+
+levels(Merged_data.test$TARGET)
+
+# Use cutoff point of 0.5 to convert probabilities to class
+predicted.test.class <- ifelse(predicted.test.prob > 0.5, "1", "0")
+
+
+
+# Generating a confusion matrix
+library(caret)
+confusionMatrix(data = as.factor(predicted.test.class), reference = Merged_data.test$TARGET)
+
+
+# sensitivity is the accuracy of predicting the positive class. 
+# specificity is the accuracy of predicting the negative class. 
+
+
+
+# Checking the AUC
+library(pROC)
+roc = roc(Merged_data.test$TARGET, predicted.test.prob)
+auc(roc)
+plot(roc)
+
+
+
+```
+
+
+
+
+## Variable selection 
+
+### Forward selection 
+
+```{r}
+
+# Define base intercept only model
+model.null <- glm(TARGET ~1, data =  Merged_data.train, family = 'binomial')
+
+
+# Full model with all predictors
+model.full <- logit.reg.all
+
+library(MASS)
+
+
+# Perform forward algorithm
+reduced.forward.model <- stepAIC(model.null, scope =list(lower = model.null, upper = model.full), direction = "forward", trace = FALSE)
+summary(reduced.forward.model)
+
+forwardmodelsaved <- reduced.forward.model
+summary(forwardmodelsaved)
+
+
+```
+
+
